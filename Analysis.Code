@@ -1,0 +1,64 @@
+install.packages("gridExtra")
+library(gridExtra)
+
+
+unzip("Data.2.zip")
+class.code=readRDS("Source_Classification_Code.rds")
+summary.pm25=readRDS("summarySCC_PM25.rds")
+master=merge(class.code[,c("SCC","SCC.Level.One","SCC.Level.Two","SCC.Level.Three")],summary.pm25,by.x="SCC",by.y = "SCC")
+year.table=with(master,tapply(Emissions,year,sum))
+
+#plot 1: Have total emissions from PM2.5 decreased in the United States from 1999 to 2008?
+plot(year.table,type='l',xlab="Year",ylab="Total PM2.5 Emissions",lwd=3,col="navy",main="Total PM2.5 Emissions in United States",xaxt='n')
+axis(1,at=seq(1:4),labels=rownames(year.table))
+
+#plot 2: Have total emissions from PM2.5 decreased in the Baltimore City, Maryland (fips == "24510") from 1999 to 2008?
+balt=subset(master,fips=="24510")
+balt.table=with(balt, tapply(Emissions,year,sum))
+plot(balt.table,type='l',xlab="Year",ylab="Total PM2.5 Emissions",lwd=3,col="navy",main="Total PM2.5 Emissions in Baltimore City",xaxt='n')
+axis(1,at=seq(1:4),labels=rownames(balt.table))
+
+#plot 3: Of the four types of sources indicated by the type (point, nonpoint, onroad, nonroad) variable, which of these four sources have seen decreases in emissions from 1999–2008 for Baltimore City?
+#create a table of sum of emissions by type
+balt.type.list=split(balt,balt$type)
+balt.list.sum=lapply(balt.type.list,function(tmp) tapply(tmp[,"Emissions"],tmp[,"year"],sum))
+balt.sum.tab=as.data.frame(balt.list.sum)
+balt.sum.tab$year=rownames(balt.sum.tab)
+
+plot1= qplot(year,NON.ROAD,data=balt.sum.tab,group=1,geom=c("point","line"),ylab="Total Emissions PM2.5",main="NON ROAD PM2.5 Emissions Total")
+plot2= qplot(year,ON.ROAD,data=balt.sum.tab,group=1,geom=c("point","line"),ylab="Total Emissions PM2.5",main="ON ROAD PM2.5 Emissions Total")
+plot3=qplot(year,POINT,data=balt.sum.tab,group=1,geom=c("point","line"),ylab="Total Emissions PM2.5",main="POINT PM2.5 Emissions Total")
+plot4=qplot(year,NONPOINT,data=balt.sum.tab,group=1,geom=c("point","line"),ylab="Total Emissions PM2.5",main="NON POINT PM2.5 Emissions Total")
+
+grid.arrange(plot1,plot2,plot3,plot4)
+
+
+dev.off()
+
+
+#plot 4: Across the United States, how have emissions from coal combustion-related sources changed from 1999–2008?
+combus <- grepl("comb", master$SCC.Level.One, ignore.case=TRUE)
+coal <- grepl("coal", master$SCC.Level.Three, ignore.case=TRUE)
+coal.combus <- (coal & combus)
+coal.combus.data <- master[coal.combus,]
+combus.scc <- coal.combus.data$SCC
+combus.summ <- summary.pm25[summary.pm25$SCC %in% combus.scc,]
+q.4plot <- ggplot(combus.summ, aes(factor(year),Emissions/10^5)) +geom_bar(stat="identity")+labs(x="year",y="Total PM2.5 (10^5 Tons)")+labs(title="PM2.5 Combusion Across US from 1999-2008")
+print(q.4plot)
+
+#plot 5: How have emissions from motor vehicle sources changed from 1999–2008 in Baltimore City?
+vehicle <- grepl("vehicle",master$SCC.Level.Two,ignore.case=TRUE)
+vehicle.scc = master[vehicle,]$SCC
+vehicle.summ= summary.pm25[summary.pm25$SCC %in% vehicle.scc,]
+balt.vehicle = vehicle.summ[vehicle.summ$fips==24510,]
+q5.plot= ggplot(balt.vehicle, aes(factor(year),Emissions))+geom_bar(stat="identity")+labs(x="year",y="Total PM2.5 (10^5 Tons)",title="PM2.5 from Vehicles in Baltimore from 1999-2008")
+print(q5.plot)
+
+
+#plot 6: Compare emissions from motor vehicle sources in Baltimore City with emissions from motor vehicle sources in Los Angeles County, California (fips == "06037"). Which city has seen greater changes over time in motor vehicle emissions?
+la.vehicle <- vehicle.summ[vehicle.summ$fips==06037,]
+la.vehicle$City<-"Los Angeles"
+balt.vehicle$City <- "Baltimore"
+balt.la <- rbind(la.vehicle,balt.vehicle)
+q6.plot <- ggplot(balt.la, aes(x=factor(year),y=Emissions,fill=City))+geom_bar(aes(fill=year),stat="identity")+facet_grid(.~City)+ labs(x="year", y="Total PM2.5 (KiloTons)",title="Total Vehicle PM2.5 Emissions in Baltimore and LA from 1999-2008")
+print(q6.plot)
